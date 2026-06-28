@@ -1,5 +1,5 @@
 """
-GMIC Competitor Price Scraper — v2.3
+GMIC Competitor Price Scraper — v2.4
 Scans the web for current dubia roach pricing across US and Canada.
 Compares against GMIC's price list with per-roach estimates,
 CAD/USD conversion, subscription tracking, stock status,
@@ -245,18 +245,20 @@ COMPETITORS = [
     {
         "name": "Pisces Pros Canada",
         "country": "CA",
-        "url": "https://www.piscespros.com/collections/feeders",
+        "url": "https://news.google.com/rss/search?q=pisces+pros+dubia+roach+price&hl=en-CA&gl=CA&ceid=CA:en",
         "type": "live",
         "currency": "CAD",
-        "notes": "Major Canadian reptile supplier",
+        "notes": "Major Canadian reptile supplier — via RSS fallback",
+        "use_rss": True,
     },
     {
         "name": "Big Al's Canada",
         "country": "CA",
-        "url": "https://www.bigalspets.ca/reptiles/reptile-food/",
+        "url": "https://news.google.com/rss/search?q=big+als+dubia+roach+feeder+insect+canada&hl=en-CA&gl=CA&ceid=CA:en",
         "type": "freeze_dried",
         "currency": "CAD",
-        "notes": "Canadian pet chain",
+        "notes": "Canadian pet chain — via RSS fallback",
+        "use_rss": True,
     },
     {
         "name": "Josh's Frogs Canada",
@@ -265,6 +267,23 @@ COMPETITORS = [
         "type": "live",
         "currency": "CAD",
         "notes": "US seller shipping to Canada",
+    },
+    {
+        "name": "Reptile Centre Canada",
+        "country": "CA",
+        "url": "https://www.reptilecentre.ca/collections/feeder-insects",
+        "type": "live",
+        "currency": "CAD",
+        "notes": "Canadian reptile specialty retailer",
+    },
+    {
+        "name": "Canada Reptile Expos",
+        "country": "CA",
+        "url": "https://news.google.com/rss/search?q=dubia+roach+price+canada+feeder&hl=en-CA&gl=CA&ceid=CA:en",
+        "type": "live",
+        "currency": "CAD",
+        "notes": "General Canada market pricing via news RSS",
+        "use_rss": True,
     },
 ]
 
@@ -733,8 +752,8 @@ def write_excel(df, filepath="gmic_price_analysis.xlsx"):
     ws3.append(["Out of stock detected",    (df["In Stock"]=="No").sum()])
     ws3.append([])
     ws3.append(["GMIC Competitive Status", "Count"])
-    for label, emoji in [(" Competitive",""),(" GMIC Higher",""),(" GMIC Lower","")]:
-        count = df["vs GMIC"].str.contains(emoji, na=False).sum() if "vs GMIC" in df.columns else 0
+    for label, prefix in [("Competitive", "OK:"), ("GMIC Higher", "HIGH:"), ("GMIC Lower", "LOW:")]:
+        count = df["vs GMIC"].str.startswith(prefix, na=False).sum() if "vs GMIC" in df.columns else 0
         ws3.append([label, count])
     ws3.column_dimensions["A"].width = 30
     ws3.column_dimensions["B"].width = 16
@@ -755,7 +774,7 @@ def write_excel(df, filepath="gmic_price_analysis.xlsx"):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  GMIC Competitor Price Scraper v2.3")
+    print("  GMIC Competitor Price Scraper v2.4")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"  {len(COMPETITORS)} competitors")
     print("=" * 60 + "\n")
