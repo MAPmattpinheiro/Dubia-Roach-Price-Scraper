@@ -263,10 +263,10 @@ COMPETITORS = [
     {
         "name": "Josh's Frogs Canada",
         "country": "CA",
-        "url": "https://www.joshsfrogs.com/dubia-roaches.html",
-        "type": "live",
+        "url": "https://www.joshsfrogs.com/freeze-dried-dubia-roaches.html",
+        "type": "freeze_dried",
         "currency": "CAD",
-        "notes": "US seller shipping to Canada",
+        "notes": "US seller shipping freeze-dried to Canada only — live dubia banned in Canada",
     },
     {
         "name": "Reptile Centre Canada",
