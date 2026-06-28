@@ -1,0 +1,19 @@
+# Excel output — don't commit data files
+data/*.xlsx
+data/*.xls
+data/*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/

@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GMIC Price Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+ :root {
+  --green-dark:  #1a3a1a;
+  --green-mid:  #2d5a27;
+  --green-light: #4a8c3f;
+  --green-pale:  #e8f5e3;
+  --green-accent: #6bbf59;
+  --mountain:   #3d6b4f;
+  --cream:    #f7f4ee;
+  --warm-white:  #fdfcfa;
+  --text-primary: #1a2318;
+  --text-secondary: #4a5e45;
+  --text-muted:  #8a9e85;
+  --border:    #d4e6cc;
+  --red-alert:  #c0392b;
+  --red-light:  #fde8e6;
+  --amber:    #e67e22;
+  --amber-light: #fef3e2;
+  --ok-light:   #e8f5e3;
+  --font-display: 'Georgia', serif;
+  --font-body:  system-ui, -apple-system, sans-serif;
+  --font-mono:  'Courier New', monospace;
+ }
+
+ * { box-sizing: border-box; margin: 0; padding: 0; }
+
+ body {
+  font-family: var(--font-body);
+  background: var(--cream);
+  color: var(--text-primary);
+  min-height: 100vh;
+ }
+
+ /* ── Header ── */
+ .header {
+  background: var(--green-dark);
+  color: white;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 3px solid var(--green-accent);
+ }
+ .header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+ }
+ .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+ }
+ .brand-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--green-accent);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+ }
+ .brand-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+ }
+ .brand-sub {
+  font-size: 11px;
+  color: var(--green-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 1px;
+ }
+ .header-meta {
+  text-align: right;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+ }
+ #last-updated { color: var(--green-accent); font-weight: 600; }
+
+ /* ── Upload Zone ── */
+ .upload-zone {
+  max-width: 1400px;
+  margin: 32px auto;
+  padding: 0 32px;
+ }
+ .upload-card {
+  background: var(--warm-white);
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+ }
+ .upload-card:hover, .upload-card.drag-over {
+  border-color: var(--green-light);
+  background: var(--green-pale);
+ }
+ .upload-icon { font-size: 40px; margin-bottom: 12px; }
+ .upload-title { font-family: var(--font-display); font-size: 20px; color: var(--text-primary); margin-bottom: 6px; }
+ .upload-sub { font-size: 14px; color: var(--text-secondary); }
+ .upload-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; font-family: var(--font-mono); }
+ #file-input { display: none; }
+
+ /* ── Dashboard ── */
+ .dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 32px 48px;
+  display: none;
+ }
+
+ /* ── KPI Row ── */
+ .kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+ }
+ .kpi {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  border-top: 3px solid var(--green-light);
+ }
+ .kpi.alert { border-top-color: var(--red-alert); }
+ .kpi.amber { border-top-color: var(--amber); }
+ .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 8px; }
+ .kpi-value { font-family: var(--font-display); font-size: 32px; font-weight: bold; color: var(--text-primary); }
+ .kpi-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+ /* ── Filters ── */
+ .filters {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+ }
+ .filter-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+ select {
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--cream);
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+ }
+ select:focus { border-color: var(--green-light); }
+ .filter-sep { width: 1px; height: 24px; background: var(--border); }
+
+ /* ── Grid ── */
+ .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+ .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+
+ /* ── Panel ── */
+ .panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+ }
+ .panel-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+ }
+ .panel-title span { color: var(--text-muted); }
+ .chart-wrap { position: relative; height: 260px; }
+ .chart-wrap-lg { position: relative; height: 320px; }
+
+ /* ── Table ── */
+ .table-wrap { overflow-x: auto; }
+ table { width: 100%; border-collapse: collapse; font-size: 13px; }
+ th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  background: var(--cream);
+ }
+ td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+ }
+ tr:last-child td { border-bottom: none; }
+ tr:hover td { background: var(--green-pale); }
+ .badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+ }
+ .badge-ok   { background: var(--ok-light);  color: #1a5c1a; }
+ .badge-high  { background: var(--red-light);  color: var(--red-alert); }
+ .badge-low  { background: var(--amber-light); color: var(--amber); }
+ .badge-na   { background: #f0f0f0; color: #888; }
+ .badge-oos  { background: var(--red-light); color: var(--red-alert); }
+ .badge-us   { background: #e8f0fe; color: #1a3c8f; }
+ .badge-ca   { background: #fff0e8; color: #8f3a1a; }
+ .price-cell  { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+ .per-roach  { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+
+ /* ── Rate bar ── */
+ .rate-bar {
+  background: var(--green-dark);
+  color: rgba(255,255,255,0.8);
+  font-size: 12px;
+  padding: 6px 32px;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+ }
+ .rate-bar strong { color: var(--green-accent); }
+
+ /* ── Empty state ── */
+ .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+
+ /* ── Opportunity alerts ── */
+ .alerts { margin-bottom: 20px; }
+ .alert-item {
+  background: var(--red-light);
+  border-left: 4px solid var(--red-alert);
+  border-radius: 0 8px 8px 0;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+ }
+ .alert-item.amber-alert {
+  background: var(--amber-light);
+  border-color: var(--amber);
+ }
+ .alert-icon { font-size: 16px; flex-shrink: 0; }
+
+ @media (max-width: 900px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .header-inner, .upload-zone, .dashboard { padding-left: 16px; padding-right: 16px; }
+ }
+</style>
+</head>
+<body>
+
+<header class="header">
+ <div class="header-inner">
+  <div class="brand">
+   <div class="brand-icon"></div>
+   <div>
+    <div class="brand-name">Green Mountains Insect Co.</div>
+    <div class="brand-sub">Price Intelligence Dashboard</div>
+   </div>
+  </div>
+  <div class="header-meta">
+   Last run: <span id="last-updated">—</span><br>
+   Burlington, VT
+  </div>
+ </div>
+ <div class="rate-bar" id="rate-bar" style="display:none">
+  <span>CAD/USD: <strong id="cad-rate">—</strong></span>
+  <span>Rate source: <strong id="rate-source">—</strong></span>
+  <span>Fetched: <strong id="rate-fetched">—</strong></span>
+  <span>Competitors: <strong id="comp-count">—</strong></span>
+ </div>
+</header>
+
+<div class="upload-zone" id="upload-zone">
+ <div class="upload-card" id="drop-zone">
+  <div class="upload-icon"></div>
+  <div class="upload-title">Load your price data</div>
+  <div class="upload-sub">Upload <code>gmic_price_analysis.xlsx</code> to populate the dashboard</div>
+  <div class="upload-hint">Drag & drop or click to browse</div>
+  <input type="file" id="file-input" accept=".xlsx,.xls">
+ </div>
+</div>
+
+<div class="dashboard" id="dashboard">
+
+ <!-- KPI Row -->
+ <div class="kpi-row" id="kpi-row"></div>
+
+ <!-- Alerts -->
+ <div class="alerts" id="alerts"></div>
+
+ <!-- Filters -->
+ <div class="filters">
+  <span class="filter-label">Filter</span>
+  <select id="filter-country">
+   <option value="all">All Countries</option>
+   <option value="US"> US Only</option>
+   <option value="CA"> Canada Only</option>
+  </select>
+  <select id="filter-type">
+   <option value="all">All Product Types</option>
+   <option value="Live Feeder">Live Feeders</option>
+   <option value="Freeze-Dried">Freeze-Dried</option>
+   <option value="Subscription">Subscription</option>
+  </select>
+  <select id="filter-size">
+   <option value="all">All Sizes</option>
+  </select>
+  <div class="filter-sep"></div>
+  <select id="filter-status">
+   <option value="all">All Status</option>
+   <option value="">Competitive</option>
+   <option value="">GMIC Higher</option>
+   <option value="">GMIC Lower</option>
+  </select>
+  <select id="filter-stock">
+   <option value="all">All Stock</option>
+   <option value="Yes">In Stock</option>
+   <option value="No">Out of Stock</option>
+  </select>
+ </div>
+
+ <!-- Charts Row 1 -->
+ <div class="grid-2">
+  <div class="panel">
+   <div class="panel-title">Per-Roach Price by Competitor <span>USD · filtered view</span></div>
+   <div class="chart-wrap"><canvas id="chart-perroach"></canvas></div>
+  </div>
+  <div class="panel">
+   <div class="panel-title">Competitive Status Breakdown <span>vs GMIC</span></div>
+   <div class="chart-wrap"><canvas id="chart-status"></canvas></div>
+  </div>
+ </div>
+
+ <!-- Charts Row 2 -->
+ <div class="grid-3">
+  <div class="panel">
+   <div class="panel-title">Articles by Country</div>
+   <div class="chart-wrap"><canvas id="chart-country"></canvas></div>
+  </div>
+  <div class="panel">
+   <div class="panel-title">Product Type Split</div>
+   <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
+  </div>
+  <div class="panel">
+   <div class="panel-title">Free Shipping Thresholds</div>
+   <div class="chart-wrap"><canvas id="chart-ship"></canvas></div>
+  </div>
+ </div>
+
+ <!-- Data Table -->
+ <div class="panel">
+  <div class="panel-title">All Price Points <span id="row-count"></span></div>
+  <div class="table-wrap">
+   <table>
+    <thead>
+     <tr>
+      <th>Competitor</th>
+      <th>Country</th>
+      <th>Type</th>
+      <th>Size</th>
+      <th>Price (Native)</th>
+      <th>Price (USD)</th>
+      <th>Per-Roach</th>
+      <th>GMIC Price</th>
+      <th>vs GMIC</th>
+      <th>Free Ship</th>
+      <th>Sub</th>
+      <th>In Stock</th>
+      <th>Date</th>
+     </tr>
+    </thead>
+    <tbody id="data-table"></tbody>
+   </table>
+  </div>
+ </div>
+
+</div>
+
+<script>
+let allData = [];
+let charts = {};
+
+// ── File Upload ──────────────────────────────────────────────────────────────
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+ e.preventDefault();
+ dropZone.classList.remove('drag-over');
+ if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+ const reader = new FileReader();
+ reader.onload = e => {
+  const wb = XLSX.read(e.target.result, { type: 'array' });
+  const ws = wb.Sheets['Competitor Prices'];
+  if (!ws) { alert('Could not find "Competitor Prices" sheet. Make sure you upload gmic_price_analysis.xlsx'); return; }
+  const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  allData = json;
+  initDashboard();
+ };
+ reader.readAsArrayBuffer(file);
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+function initDashboard() {
+ document.getElementById('upload-zone').style.display = 'none';
+ document.getElementById('dashboard').style.display  = 'block';
+
+ // Rate bar
+ if (allData.length) {
+  const first = allData[0];
+  document.getElementById('cad-rate').textContent  = first['CAD/USD Rate'] || '—';
+  document.getElementById('rate-source').textContent = first['Rate Source']  || '—';
+  document.getElementById('rate-fetched').textContent= first['Rate Fetched At'] || '—';
+  document.getElementById('comp-count').textContent = [...new Set(allData.map(r => r['Competitor']))].length;
+  document.getElementById('last-updated').textContent= first['Scraped Date'] || '—';
+  document.getElementById('rate-bar').style.display = 'flex';
+ }
+
+ // Size filter options
+ const sizes = [...new Set(allData.map(r => r['Size / Product']).filter(Boolean))].sort();
+ const sizeSelect = document.getElementById('filter-size');
+ sizes.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sizeSelect.appendChild(o); });
+
+ // Filter listeners
+ ['filter-country','filter-type','filter-size','filter-status','filter-stock'].forEach(id => {
+  document.getElementById(id).addEventListener('change', render);
+ });
+
+ render();
+}
+
+function getFiltered() {
+ const country = document.getElementById('filter-country').value;
+ const type  = document.getElementById('filter-type').value;
+ const size  = document.getElementById('filter-size').value;
+ const status = document.getElementById('filter-status').value;
+ const stock  = document.getElementById('filter-stock').value;
+
+ return allData.filter(r => {
+  if (country !== 'all' && r['Country'] !== country) return false;
+  if (type  !== 'all' && r['Product Type'] !== type) return false;
+  if (size  !== 'all' && r['Size / Product'] !== size) return false;
+  if (status !== 'all' && !String(r['vs GMIC'] || '').includes(status)) return false;
+  if (stock  !== 'all' && r['In Stock'] !== stock) return false;
+  return true;
+ });
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+function render() {
+ const data = getFiltered();
+ renderKPIs(data);
+ renderAlerts(data);
+ renderCharts(data);
+ renderTable(data);
+}
+
+function renderKPIs(data) {
+ const total   = data.length;
+ const comps   = new Set(data.map(r => r['Competitor'])).size;
+ const higher   = data.filter(r => String(r['vs GMIC']||'').includes('')).length;
+ const oos    = data.filter(r => r['In Stock'] === 'No').length;
+ const caRows   = data.filter(r => r['Country'] === 'CA');
+ const caAvg   = caRows.length ? (caRows.reduce((s,r) => s + (parseFloat(r['Price (USD Est.)'])||0), 0) / caRows.length).toFixed(2) : '—';
+
+ document.getElementById('kpi-row').innerHTML = `
+  <div class="kpi"><div class="kpi-label">Price Points</div><div class="kpi-value">${total}</div><div class="kpi-sub">${comps} competitors</div></div>
+  <div class="kpi alert"><div class="kpi-label">GMIC Higher</div><div class="kpi-value">${higher}</div><div class="kpi-sub">review pricing</div></div>
+  <div class="kpi"><div class="kpi-label">Competitive</div><div class="kpi-value">${data.filter(r=>String(r['vs GMIC']||'').includes('')).length}</div><div class="kpi-sub">within range</div></div>
+  <div class="kpi amber"><div class="kpi-label">Out of Stock</div><div class="kpi-value">${oos}</div><div class="kpi-sub">opportunity signal</div></div>
+  <div class="kpi"><div class="kpi-label">Canada Avg (USD)</div><div class="kpi-value">$${caAvg}</div><div class="kpi-sub">${caRows.length} CA price points</div></div>
+ `;
+}
+
+function renderAlerts(data) {
+ const alerts = [];
+ const oos   = data.filter(r => r['In Stock'] === 'No');
+ const higher = data.filter(r => String(r['vs GMIC']||'').includes(''));
+
+ oos.forEach(r => {
+  alerts.push(`<div class="alert-item amber-alert"><span class="alert-icon"></span><span><strong>${r['Competitor']}</strong> is OUT OF STOCK on <strong>${r['Size / Product']}</strong> — potential demand gap for GMIC</span></div>`);
+ });
+ if (higher.length > 3) {
+  alerts.push(`<div class="alert-item"><span class="alert-icon"></span><span><strong>${higher.length} price points</strong> where GMIC is priced higher than competitors —review pricing strategy</span></div>`);
+ }
+ document.getElementById('alerts').innerHTML = alerts.join('');
+}
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function renderCharts(data) {
+ // Per-roach by competitor
+ destroyChart('perroach');
+ const prData = {};
+ data.forEach(r => {
+  const pr = parseFloat(r['Per-Roach (USD)']);
+  if (!isNaN(pr) && pr > 0) {
+   if (!prData[r['Competitor']]) prData[r['Competitor']] = [];
+   prData[r['Competitor']].push(pr);
+  }
+ });
+ const prLabels = Object.keys(prData);
+ const prVals  = prLabels.map(k => (prData[k].reduce((a,b)=>a+b,0)/prData[k].length).toFixed(3));
+ const prColors = prVals.map(v => parseFloat(v) > 0.40 ? '#6bbf59' : '#3d6b4f');
+
+ if (prLabels.length) {
+  charts['perroach'] = new Chart(document.getElementById('chart-perroach'), {
+   type: 'bar',
+   data: { labels: prLabels, datasets: [{ label: 'Avg Per-Roach (USD)', data: prVals, backgroundColor: prColors, borderRadius: 4 }] },
+   options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { x: { ticks: { callback: v => '$'+v } } } }
+  });
+ }
+
+ // Status donut
+ destroyChart('status');
+ const ok = data.filter(r => String(r['vs GMIC']||'').includes('')).length;
+ const hi = data.filter(r => String(r['vs GMIC']||'').includes('')).length;
+ const lo = data.filter(r => String(r['vs GMIC']||'').includes('')).length;
+ const na = data.length - ok - hi - lo;
+ charts['status'] = new Chart(document.getElementById('chart-status'), {
+  type: 'doughnut',
+  data: { labels: ['Competitive','GMIC Higher','GMIC Lower','N/A'], datasets: [{ data: [ok,hi,lo,na], backgroundColor: ['#4a8c3f','#c0392b','#e67e22','#ccc'], borderWidth: 2, borderColor: '#fdfcfa' }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } } }
+ });
+
+ // Country bar
+ destroyChart('country');
+ const cCounts = {};
+ data.forEach(r => { cCounts[r['Country']] = (cCounts[r['Country']]||0) + 1; });
+ charts['country'] = new Chart(document.getElementById('chart-country'), {
+  type: 'bar',
+  data: { labels: Object.keys(cCounts), datasets: [{ data: Object.values(cCounts), backgroundColor: ['#3d6b4f','#e67e22'], borderRadius: 6 }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+ });
+
+ // Type donut
+ destroyChart('type');
+ const tCounts = {};
+ data.forEach(r => { tCounts[r['Product Type']] = (tCounts[r['Product Type']]||0) + 1; });
+ charts['type'] = new Chart(document.getElementById('chart-type'), {
+  type: 'doughnut',
+  data: { labels: Object.keys(tCounts), datasets: [{ data: Object.values(tCounts), backgroundColor: ['#2d5a27','#4a8c3f','#6bbf59','#a8d8a0'], borderWidth: 2, borderColor: '#fdfcfa' }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } } }
+ });
+
+ // Free ship bar
+ destroyChart('ship');
+ const shipData = {};
+ data.forEach(r => {
+  const s = r['Free Ship At'];
+  if (s && s !== 'No / Unknown') { shipData[r['Competitor']] = s; }
+ });
+ const shipLabels = Object.keys(shipData);
+ const shipVals  = shipLabels.map(k => {
+  const v = shipData[k];
+  if (v === 'Yes (no min)') return 0;
+  return parseFloat(String(v).replace('$','')) || 0;
+ });
+ charts['ship'] = new Chart(document.getElementById('chart-ship'), {
+  type: 'bar',
+  data: { labels: shipLabels, datasets: [{ label: 'Free Ship Threshold ($)', data: shipVals, backgroundColor: '#6bbf59', borderRadius: 4 }] },
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+   scales: { x: { ticks: { callback: v => v === 0 ? 'No min' : '$'+v } } } }
+ });
+}
+
+function statusBadge(val) {
+ const v = String(val || '');
+ if (v.includes('')) return `<span class="badge badge-ok">${v}</span>`;
+ if (v.includes('')) return `<span class="badge badge-high">${v}</span>`;
+ if (v.includes('')) return `<span class="badge badge-low">${v}</span>`;
+ return `<span class="badge badge-na">N/A</span>`;
+}
+
+function renderTable(data) {
+ document.getElementById('row-count').textContent = `${data.length} rows`;
+ const tbody = document.getElementById('data-table');
+
+ if (!data.length) {
+  tbody.innerHTML = '<tr><td colspan="13" class="empty">No data matches current filters</td></tr>';
+  return;
+ }
+
+ tbody.innerHTML = data.map(r => {
+  const country = r['Country'] === 'CA'
+   ? `<span class="badge badge-ca">CA</span>`
+   : `<span class="badge badge-us">US</span>`;
+  const stock = r['In Stock'] === 'No'
+   ? `<span class="badge badge-oos">Out of Stock</span>`
+   : `<span style="color:#4a8c3f;font-size:12px;">In stock</span>`;
+  const native = r['Currency'] === 'CAD'
+   ? `CA$${parseFloat(r['Price (Native)']||0).toFixed(2)}`
+   : `$${parseFloat(r['Price (Native)']||0).toFixed(2)}`;
+  const usd  = r['Price (USD Est.)'] ? `$${parseFloat(r['Price (USD Est.)']).toFixed(2)}` : '—';
+  const pr   = r['Per-Roach (USD)']  ? `$${parseFloat(r['Per-Roach (USD)']).toFixed(3)}`  : '—';
+  const gmic  = r['GMIC Price (USD)'] ? `$${parseFloat(r['GMIC Price (USD)']).toFixed(2)}` : '—';
+
+  return `<tr>
+   <td><strong>${r['Competitor']||''}</strong></td>
+   <td>${country}</td>
+   <td>${r['Product Type']||''}</td>
+   <td>${r['Size / Product']||''}</td>
+   <td class="price-cell">${native}</td>
+   <td class="price-cell">${usd}</td>
+   <td class="per-roach">${pr}</td>
+   <td class="per-roach">${gmic}</td>
+   <td>${statusBadge(r['vs GMIC'])}</td>
+   <td style="font-size:12px">${r['Free Ship At']||'—'}</td>
+   <td style="font-size:12px">${r['Subscription']||'—'}</td>
+   <td>${stock}</td>
+   <td style="font-size:12px;color:var(--text-muted)">${r['Scraped Date']||''}</td>
+  </tr>`;
+ }).join('');
+}
+</script>
+</body>
+</html>
