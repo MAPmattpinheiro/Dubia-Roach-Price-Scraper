@@ -1,14 +1,14 @@
 """
-GMIC Competitor Price Scraper — v2.0
+GMIC Competitor Price Scraper — v2.2
 Scans the web for current dubia roach pricing across US and Canada.
 Compares against GMIC's price list with per-roach estimates,
 CAD/USD conversion, subscription tracking, stock status,
 and price history appending.
-
+ 
 Run: python gmic_price_scraper.py
 Output: gmic_price_analysis.xlsx
 """
-
+ 
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -19,9 +19,9 @@ from datetime import datetime
 import time
 import re
 import os
-
+ 
 # ─── GMIC BASELINE PRICES ────────────────────────────────────────────────────
-
+ 
 GMIC_PRICES = {
     "live": {
         "Small / Nymphs (50-100ct)":  {"price": 12.99, "count_mid": 75,  "size": "1/4\"-3/8\""},
@@ -43,13 +43,13 @@ GMIC_PRICES = {
     "free_ship_threshold": 100.00,
     "currency": "USD"
 }
-
+ 
 # ─── CAD/USD EXCHANGE RATE ───────────────────────────────────────────────────
 # Fetched live at runtime via open.er-api.com (free, no API key needed)
 # Falls back to hardcoded value if the API is unreachable
-
+ 
 CAD_TO_USD_FALLBACK = 0.73  # fallback if API unavailable
-
+ 
 def fetch_cad_usd_rate():
     """Fetch live CAD/USD rate from open.er-api.com (free, no key needed)."""
     try:
@@ -64,14 +64,14 @@ def fetch_cad_usd_rate():
     except Exception as e:
         print(f"   Live rate unavailable ({e}), using fallback: {CAD_TO_USD_FALLBACK}")
         return CAD_TO_USD_FALLBACK, datetime.now().strftime("%Y-%m-%d %H:%M"), "fallback"
-
+ 
 # Set at runtime in main()
 CAD_TO_USD      = CAD_TO_USD_FALLBACK
 CAD_RATE_AT     = ""
 CAD_RATE_SOURCE = "fallback"
-
+ 
 # ─── COMPETITORS TO SCRAPE ───────────────────────────────────────────────────
-
+ 
 COMPETITORS = [
     # ── US Live Feeder Sellers ──────────────────────────────────────────────
     {
@@ -109,7 +109,7 @@ COMPETITORS = [
     {
         "name": "TopFlight Dubia",
         "country": "US",
-        "url": "https://topflightdubia.com/product/dubia-roaches/",
+        "url": "https://topflightdubia.com/shop/",
         "type": "live",
         "currency": "USD",
         "notes": "Organic fed, premium market",
@@ -133,7 +133,7 @@ COMPETITORS = [
     {
         "name": "Dubia Roach Broker",
         "country": "US",
-        "url": "https://dubiaroachbroker.com/collections/dubia-by-the-pound",
+        "url": "https://dubiaroachbroker.com/collections/all",
         "type": "live",
         "currency": "USD",
         "notes": "Sells by gram/pound — bulk model",
@@ -149,10 +149,11 @@ COMPETITORS = [
     {
         "name": "Chewy - Live Feeders",
         "country": "US",
-        "url": "https://www.chewy.com/b/dubia-roaches-3925",
+        "url": "https://news.google.com/rss/search?q=chewy+dubia+roaches+price&hl=en-US&gl=US&ceid=US:en",
         "type": "live",
         "currency": "USD",
-        "notes": "Major retail channel for live feeders",
+        "notes": "Major retail channel — via Google News RSS (site blocks scrapers)",
+        "use_rss": True,
     },
     # ── US Freeze-Dried Sellers ─────────────────────────────────────────────
     {
@@ -166,10 +167,11 @@ COMPETITORS = [
     {
         "name": "Chewy - Fluker's FD",
         "country": "US",
-        "url": "https://www.chewy.com/flukers-freeze-dried-dubia-roaches/dp/867278",
+        "url": "https://news.google.com/rss/search?q=chewy+flukers+freeze+dried+dubia+roaches&hl=en-US&gl=US&ceid=US:en",
         "type": "freeze_dried",
         "currency": "USD",
-        "notes": "Retail channel pricing",
+        "notes": "Retail channel pricing — via Google News RSS (site blocks scrapers)",
+        "use_rss": True,
     },
     {
         "name": "Walmart - Fluker's FD",
@@ -182,10 +184,11 @@ COMPETITORS = [
     {
         "name": "Petco - FD Feeders",
         "country": "US",
-        "url": "https://www.petco.com/shop/en/petcostore/category/reptile/reptile-food/reptile-freeze-dried-food",
+        "url": "https://news.google.com/rss/search?q=petco+freeze+dried+dubia+roaches+price&hl=en-US&gl=US&ceid=US:en",
         "type": "freeze_dried",
         "currency": "USD",
-        "notes": "Major pet retail chain",
+        "notes": "Major pet retail chain — via Google News RSS (site blocks scrapers)",
+        "use_rss": True,
     },
     {
         "name": "PetSmart - FD Feeders",
@@ -198,10 +201,11 @@ COMPETITORS = [
     {
         "name": "Amazon US - FD Dubia",
         "country": "US",
-        "url": "https://www.amazon.com/s?k=freeze+dried+dubia+roaches",
+        "url": "https://news.google.com/rss/search?q=amazon+freeze+dried+dubia+roaches+price&hl=en-US&gl=US&ceid=US:en",
         "type": "freeze_dried",
         "currency": "USD",
-        "notes": "Marketplace pricing — includes 3rd party sellers",
+        "notes": "Marketplace pricing — via Google News RSS (site blocks scrapers)",
+        "use_rss": True,
     },
     # ── Subscription Tracking ───────────────────────────────────────────────
     {
@@ -240,7 +244,7 @@ COMPETITORS = [
     {
         "name": "Pisces Pros Canada",
         "country": "CA",
-        "url": "https://www.piscespros.com/collections/feeder-insects",
+        "url": "https://www.piscespros.com/collections/feeders",
         "type": "live",
         "currency": "CAD",
         "notes": "Major Canadian reptile supplier",
@@ -248,7 +252,7 @@ COMPETITORS = [
     {
         "name": "Big Al's Canada",
         "country": "CA",
-        "url": "https://www.bigalspets.com/reptile-supplies/reptile-food/",
+        "url": "https://www.bigalspets.ca/reptiles/reptile-food/",
         "type": "freeze_dried",
         "currency": "CAD",
         "notes": "Canadian pet chain",
@@ -262,28 +266,28 @@ COMPETITORS = [
         "notes": "US seller shipping to Canada",
     },
 ]
-
+ 
 # ─── PRICE PATTERNS ───────────────────────────────────────────────────────────
-
+ 
 PRICE_PATTERNS = [
     r'\$\s*(\d+\.?\d*)',
     r'USD\s*(\d+\.?\d*)',
     r'CAD\s*(\d+\.?\d*)',
     r'(\d+\.?\d*)\s*(?:USD|CAD)',
 ]
-
+ 
 SHIP_KEYWORDS = ["free shipping", "free ship", "ships free", "free delivery"]
-
+ 
 OUT_OF_STOCK_KEYWORDS = [
     "out of stock", "sold out", "unavailable", "notify me",
     "currently unavailable", "back order", "backordered"
 ]
-
+ 
 SUBSCRIPTION_KEYWORDS = [
     "subscribe", "subscription", "recurring", "auto-ship",
     "autoship", "subscribe & save", "subscribe and save"
 ]
-
+ 
 SIZE_LABELS = {
     "small":       "Small",
     "nymph":       "Small",
@@ -311,7 +315,7 @@ SIZE_LABELS = {
     "per pound":   "By Pound",
     "per gram":    "By Gram",
 }
-
+ 
 # Estimated roach counts per size for per-roach calculation
 COUNT_ESTIMATES = {
     "Small":     75,
@@ -324,9 +328,9 @@ COUNT_ESTIMATES = {
     "4oz Pouch": 140,
     "16oz Bulk": 500,
 }
-
+ 
 # ─── SCRAPER ─────────────────────────────────────────────────────────────────
-
+ 
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -336,7 +340,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
-
+ 
 def fetch_page(url):
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
@@ -345,7 +349,7 @@ def fetch_page(url):
     except Exception as e:
         print(f"     Could not fetch {url}: {e}")
         return None
-
+ 
 def extract_prices_from_text(text):
     prices = []
     for pattern in PRICE_PATTERNS:
@@ -357,7 +361,7 @@ def extract_prices_from_text(text):
             except:
                 pass
     return list(set(prices))
-
+ 
 def find_free_shipping(soup):
     text = soup.get_text().lower()
     for kw in SHIP_KEYWORDS:
@@ -370,11 +374,11 @@ def find_free_shipping(soup):
                 return float(match.group(1))
             return 0.0
     return None
-
+ 
 def detect_out_of_stock(soup):
     text = soup.get_text().lower()
     return any(kw in text for kw in OUT_OF_STOCK_KEYWORDS)
-
+ 
 def detect_subscription(soup):
     text = soup.get_text().lower()
     if any(kw in text for kw in SUBSCRIPTION_KEYWORDS):
@@ -386,42 +390,95 @@ def detect_subscription(soup):
             return f"{match.group(1)}% off"
         return "Yes (% unknown)"
     return "No"
-
+ 
 def categorize_price_context(context_text):
     ctx = context_text.lower()
     for key, label in SIZE_LABELS.items():
         if key in ctx:
             return label
     return "Unknown"
-
+ 
 def per_roach_price(price, size_label, currency):
     count = COUNT_ESTIMATES.get(size_label)
     if count and price:
         usd = price * CAD_TO_USD if currency == "CAD" else price
         return round(usd / count, 3)
     return None
-
+ 
+def scrape_rss_fallback(comp):
+    """For sites that block scrapers, fetch Google News RSS and extract any price mentions."""
+    print(f"  Scraping {comp['name']} ({comp['country']}) via RSS fallback...")
+    try:
+        resp = requests.get(comp["url"], headers=HEADERS, timeout=12)
+        soup = BeautifulSoup(resp.content, "xml")
+        items = soup.find_all("item")
+        rows = []
+        seen = set()
+        for item in items:
+            title = item.find("title")
+            desc  = item.find("description")
+            text  = (title.get_text() if title else "") + " " + (desc.get_text() if desc else "")
+            prices = extract_prices_from_text(text)
+            for p in prices:
+                key = round(p, 2)
+                if key in seen:
+                    continue
+                seen.add(key)
+                category = categorize_price_context(text)
+                price_usd = round(p * CAD_TO_USD, 2) if comp["currency"] == "CAD" else p
+                per_roach = per_roach_price(p, category, comp["currency"])
+                rows.append({
+                    "Scraped Date":      datetime.now().strftime("%Y-%m-%d"),
+                    "Competitor":        comp["name"],
+                    "Country":           comp["country"],
+                    "Product Type":      {"live": "Live Feeder", "freeze_dried": "Freeze-Dried",
+                                          "subscription": "Subscription"}.get(comp["type"], comp["type"]),
+                    "Size / Product":    category,
+                    "Price (Native)":    p,
+                    "Currency":          comp["currency"],
+                    "Price (USD Est.)":  price_usd,
+                    "Per-Roach (USD)":   per_roach,
+                    "Free Ship At":      "Unknown (RSS)",
+                    "Subscription":      "N/A",
+                    "In Stock":          "Unknown",
+                    "CAD/USD Rate":      CAD_TO_USD,
+                    "Rate Source":       CAD_RATE_SOURCE,
+                    "Rate Fetched At":   CAD_RATE_AT,
+                    "Notes":             comp.get("notes", "") + " | Price from news mention",
+                    "Source URL":        comp["url"],
+                    "Context Snippet":   text[:120].strip(),
+                })
+        print(f"     {len(rows)} price mentions found via RSS")
+        return rows
+    except Exception as e:
+        print(f"     RSS fallback failed: {e}")
+        return []
+ 
 def scrape_competitor(comp):
+    # Use RSS fallback for sites known to block scrapers
+    if comp.get("use_rss"):
+        return scrape_rss_fallback(comp)
+ 
     print(f"  Scraping {comp['name']} ({comp['country']})...")
     soup = fetch_page(comp["url"])
     if not soup:
         return []
-
+ 
     page_text  = soup.get_text(separator=" ")
     prices     = extract_prices_from_text(page_text)
     free_ship  = find_free_shipping(soup)
     oos        = detect_out_of_stock(soup)
     sub_info   = detect_subscription(soup) if comp["type"] == "subscription" else "N/A"
-
+ 
     if not prices:
         print(f"     No prices found")
         return []
-
+ 
     # Structured price extraction
     price_elements = soup.find_all(
         class_=re.compile(r'price|cost|amount|money', re.I)
     )
-
+ 
     found_pairs = []
     for el in price_elements:
         el_text = el.get_text(strip=True)
@@ -434,11 +491,11 @@ def scrape_competitor(comp):
                     found_pairs.append((val, category, parent_text[:150]))
             except:
                 pass
-
+ 
     if not found_pairs:
         for p in prices[:10]:
             found_pairs.append((p, "See URL", ""))
-
+ 
     # Deduplicate
     seen = set()
     rows = []
@@ -447,10 +504,10 @@ def scrape_competitor(comp):
         if key in seen:
             continue
         seen.add(key)
-
+ 
         price_usd = round(price * CAD_TO_USD, 2) if comp["currency"] == "CAD" else price
         per_roach = per_roach_price(price, category, comp["currency"])
-
+ 
         rows.append({
             "Scraped Date":      datetime.now().strftime("%Y-%m-%d"),
             "Competitor":        comp["name"],
@@ -473,12 +530,12 @@ def scrape_competitor(comp):
             "Source URL":        comp["url"],
             "Context Snippet":   context.strip(),
         })
-
+ 
     print(f"     {len(rows)} price points | Stock: {'OUT' if oos else 'OK'} | Sub: {sub_info}")
     return rows
-
+ 
 # ─── COMPARISON ENGINE ────────────────────────────────────────────────────────
-
+ 
 def compare_to_gmic(df):
     def get_gmic_price(row):
         ptype = row["Product Type"]
@@ -500,7 +557,7 @@ def compare_to_gmic(df):
             elif "4oz" in size or "4 oz" in size:
                 return GMIC_PRICES["freeze_dried"]["Large Pouch 4oz"]["price"]
         return None
-
+ 
     def get_gmic_per_roach(row):
         ptype = row["Product Type"]
         size  = row["Size / Product"].lower()
@@ -528,7 +585,7 @@ def compare_to_gmic(df):
                 p = GMIC_PRICES["freeze_dried"]["Large Pouch 4oz"]
                 return round(p["price"] / p["count_mid"], 3)
         return None
-
+ 
     def assess(row):
         gmic = row["GMIC Price (USD)"]
         comp = row["Price (USD Est.)"]
@@ -536,18 +593,18 @@ def compare_to_gmic(df):
             return "N/A"
         diff_pct = ((gmic - comp) / comp) * 100
         if diff_pct > 15:
-            return f" GMIC {diff_pct:.0f}% higher"
+            return f"HIGH: GMIC {diff_pct:.0f}% higher"
         elif diff_pct < -15:
-            return f" GMIC {abs(diff_pct):.0f}% lower"
-        return " Competitive"
-
+            return f"LOW: GMIC {abs(diff_pct):.0f}% lower"
+        return "OK: Competitive"
+ 
     df["GMIC Price (USD)"]      = df.apply(get_gmic_price, axis=1)
     df["GMIC Per-Roach (USD)"]  = df.apply(get_gmic_per_roach, axis=1)
     df["vs GMIC"]               = df.apply(assess, axis=1)
     return df
-
+ 
 # ─── EXCEL OUTPUT ─────────────────────────────────────────────────────────────
-
+ 
 def style_header(ws, col_count):
     hfill  = PatternFill("solid", start_color="1F4E79")
     hfont  = Font(bold=True, color="FFFFFF", name="Arial", size=11)
@@ -560,7 +617,7 @@ def style_header(ws, col_count):
     for i in range(1, col_count + 1):
         c = ws.cell(row=1, column=i)
         c.font = hfont; c.fill = hfill; c.alignment = halign; c.border = border
-
+ 
 def style_rows(ws, col_count):
     body  = Font(name="Arial", size=10)
     ctr   = Alignment(horizontal="center", vertical="center")
@@ -569,14 +626,14 @@ def style_rows(ws, col_count):
         left=Side(style="thin", color="D9D9D9"), right=Side(style="thin", color="D9D9D9"),
         top=Side(style="thin", color="D9D9D9"),  bottom=Side(style="thin", color="D9D9D9"),
     )
-    vs_colors = {"": "C6EFCE", "": "FFC7CE", "": "FFEB9C"}
+    vs_colors = {"OK:": "C6EFCE", "HIGH:": "FFC7CE", "LOW:": "FFEB9C"}
     oos_cols = {}
-
+ 
     # Find column indices by header
     headers = [ws.cell(row=1, column=i).value for i in range(1, col_count + 1)]
     vs_col  = headers.index("vs GMIC") + 1 if "vs GMIC" in headers else None
     oos_col = headers.index("In Stock") + 1 if "In Stock" in headers else None
-
+ 
     for row in ws.iter_rows(min_row=2):
         ws.row_dimensions[row[0].row].height = 22
         for col_idx, cell in enumerate(row, 1):
@@ -591,7 +648,7 @@ def style_rows(ws, col_count):
             if oos_col and col_idx == oos_col:
                 if str(cell.value) == "No":
                     cell.fill = PatternFill("solid", start_color="FFC7CE")
-
+ 
 def append_history(df, filepath):
     """Append today's data to a history sheet for trend tracking."""
     if not os.path.exists(filepath):
@@ -609,13 +666,13 @@ def append_history(df, filepath):
         print(f"  History sheet updated ({len(df)} rows appended)")
     except Exception as e:
         print(f"   Could not update history: {e}")
-
+ 
 def write_excel(df, filepath="gmic_price_analysis.xlsx"):
     # Save history before overwriting main sheets
     append_history(df, filepath)
-
+ 
     wb = Workbook()
-
+ 
     # ── Competitor Prices ────────────────────────────────────────────────────
     ws1 = wb.active
     ws1.title = "Competitor Prices"
@@ -628,7 +685,7 @@ def write_excel(df, filepath="gmic_price_analysis.xlsx"):
         ws1.append(list(row))
     style_header(ws1, len(df.columns))
     style_rows(ws1, len(df.columns))
-
+ 
     # ── GMIC Baseline ────────────────────────────────────────────────────────
     ws2 = wb.create_sheet("GMIC Baseline")
     ws2.append(["Product Type", "Size / Product", "Price (USD)", "Est. Count", "Per-Roach (USD)"])
@@ -645,7 +702,7 @@ def write_excel(df, filepath="gmic_price_analysis.xlsx"):
     for col, w in zip(["A","B","C","D","E"], [18,30,14,12,16]):
         ws2.column_dimensions[col].width = w
     style_header(ws2, 5)
-
+ 
     # ── Summary ──────────────────────────────────────────────────────────────
     ws3 = wb.create_sheet("Summary")
     ws3.append(["GMIC Competitor Price Analysis — Summary"])
@@ -669,38 +726,38 @@ def write_excel(df, filepath="gmic_price_analysis.xlsx"):
     ws3.column_dimensions["A"].width = 30
     ws3.column_dimensions["B"].width = 16
     style_header(ws3, 2)
-
+ 
     # ── Price History placeholder (created by append_history on next run) ────
     ws4 = wb.create_sheet("Price History")
     ws4.append(list(df.columns))
     for row in df.itertuples(index=False):
         ws4.append(list(row))
     style_header(ws4, len(df.columns))
-
+ 
     wb.save(filepath)
     print(f"\n Saved: {filepath}")
     print(f"   {len(df)} price points | {df['Competitor'].nunique()} competitors")
-
+ 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
-
+ 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  GMIC Competitor Price Scraper v2.1")
+    print("  GMIC Competitor Price Scraper v2.2")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"  {len(COMPETITORS)} competitors")
     print("=" * 60 + "\n")
-
+ 
     # Fetch live CAD/USD rate first
     print("Fetching live CAD/USD exchange rate...")
     CAD_TO_USD, CAD_RATE_AT, CAD_RATE_SOURCE = fetch_cad_usd_rate()
     print()
-
+ 
     all_rows = []
     for comp in COMPETITORS:
         rows = scrape_competitor(comp)
         all_rows.extend(rows)
         time.sleep(1.5)
-
+ 
     if not all_rows:
         print("\n No data scraped. Check your network connection.")
     else:
@@ -708,12 +765,17 @@ if __name__ == "__main__":
         df = compare_to_gmic(df)
         df = df.sort_values(["Product Type", "Country", "Competitor"])
         write_excel(df)
-
+ 
         print("\nDone! Open gmic_price_analysis.xlsx")
         print(f"  CAD/USD rate used: {CAD_TO_USD} ({CAD_RATE_SOURCE})")
-        print(f"\n   Competitive:  {df['vs GMIC'].str.contains('', na=False).sum()}")
-        print(f"    GMIC higher:  {df['vs GMIC'].str.contains('', na=False).sum()}")
-        print(f"   GMIC lower:   {df['vs GMIC'].str.contains('', na=False).sum()}")
+        competitive = df['vs GMIC'].str.startswith('OK', na=False).sum()
+        higher      = df['vs GMIC'].str.startswith('HIGH', na=False).sum()
+        lower       = df['vs GMIC'].str.startswith('LOW', na=False).sum()
+        na          = df['vs GMIC'].eq('N/A').sum()
+        print(f"\n  Competitive:    {competitive}")
+        print(f"  GMIC Higher:    {higher}")
+        print(f"  GMIC Lower:     {lower}")
+        print(f"  Not Comparable: {na}")
         oos = (df["In Stock"] == "No").sum()
         if oos:
-            print(f"\n   {oos} out-of-stock detected — potential opportunity!")
+            print(f"\n  WARNING: {oos} out-of-stock detected — potential demand opportunity!")
