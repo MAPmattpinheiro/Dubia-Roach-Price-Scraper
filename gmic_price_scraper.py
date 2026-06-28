@@ -703,8 +703,8 @@ def write_excel(df, filepath="gmic_price_analysis.xlsx"):
     ws2 = wb.create_sheet("GMIC Baseline")
     ws2.append(["Product Type", "Size / Product", "Price (USD)", "Est. Count", "Per-Roach (USD)"])
     for size, d in GMIC_PRICES["live"].items():
-        per = round(d["price"] / d["count_mid"], 3) if d["count_mid"] else ""
-        ws2.append(["Live Feeder", size, d["price"], d["count_mid"], per])
+        per = round(d["price"] / d["count_mid"], 3) if d["count_mid"] and d["price"] else ""
+        ws2.append(["Live Feeder", size, d["price"] if d["price"] else "Not offered yet", d["count_mid"], per])
     for prod, d in GMIC_PRICES["freeze_dried"].items():
         per = round(d["price"] / d["count_mid"], 3) if d["count_mid"] else ""
         ws2.append(["Freeze-Dried", prod, d["price"], d["count_mid"], per])
